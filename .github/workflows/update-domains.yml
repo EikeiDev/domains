@@ -1,0 +1,45 @@
+name: Update domains.lst
+
+on:
+  schedule:
+    - cron: '0 */5 * * *' # каждые 5 часов
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Причина ручного запуска'
+        required: false
+        default: 'Ручной запуск'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install curl
+        run: sudo apt-get update && sudo apt-get install -y curl
+
+      - name: Download and convert file
+        run: |
+          curl -sSL "https://raw.githubusercontent.com/gSpotx2f/ruantiblock_blacklist/refs/heads/master/blacklist-1.1/fqdn/ruantiblock.dnsmasq" \
+          | grep '^nftset=/' \
+          | sed -E 's|^nftset=/([^/]+)/.*|\1|' \
+          | sort -u > domains.lst
+
+      - name: Commit changes
+        run: |
+          if [[ `git status --porcelain` ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add domains.lst
+
+            # Определяем сообщение коммита: либо причина, либо автозапуск
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              COMMIT_MSG="Manual update: ${{ github.event.inputs.reason }}"
+            else
+              COMMIT_MSG="Scheduled update of domains.lst"
+            fi
+
+            git commit -m "$COMMIT_MSG"
+            git push
